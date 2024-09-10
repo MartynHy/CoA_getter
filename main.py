@@ -3,6 +3,10 @@ import pandas as pd
 import os
 import re
 from selenium import webdriver
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -10,6 +14,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import *
 import time
 import urllib
+
 
 df = pd.read_excel('odczynniki.xls', engine='xlrd')
 
@@ -25,8 +30,7 @@ chrome_options = Options()
 chrome_options.add_argument("--disable-search-engine-choice-screen")
 driver = webdriver.Chrome(options=chrome_options)
 
-#funkcja 'table_search' wyszukuje klucze 'keys' ze słownika 'dostawcy' 
-#iterując po data frame, zwraca listy do funkcji data_pass
+#funkcja 'table_search' wyszukuje klucze 'keys' ze słownika 'dostawcy' iterując po data frame, zwraca listy do funkcji data_pass
 #funkcja data_pass zwraca listę list -> [link (słownik "dostawcy"), cat nr, lot nr (z data frame)]
 def data_pass():
 
@@ -64,8 +68,7 @@ def shadow_elements(entry_selector: str, elements_selector: str):
 
     return elements
 
-#funkcja parser nawiguje po stronie internetowej w zależności
-# od producenta (zrobiono wersję dla thermoscientific)
+#funkcja parser nawiguje po stronie internetowej w zależności od producenta (zrobiono wersję dla thermoscientific)
 def parser():
 
     web_cat_lot = data_pass()
@@ -89,32 +92,42 @@ def parser():
             #zapisanie do zmiennej "header_text" nazwy odczynnika
             try:
                 header = driver.find_element(
-                    By.XPATH, '''//*[@id="root"]/div/div[1]/div[2]/
-                    div[2]/div[1]/span''')
+                    By.XPATH, '''//*[@id="root"]/div/div[1]/div[2]/div[2]/div[1]/span''')
                 header_text = header.text
                       
             except NoSuchElementException:
                 header = driver.find_element(
-                    By.XPATH, '''//*[@id="root"]/div/div/div[4]/div/
-                    div/div/div[3]/div[1]/div/div[2]/h1''')
-                header_text = header.accessible_name  
+                    By.XPATH, '''//*[@id="root"]/div/div/div[4]/div/div/div/div[3]/div[1]/div/div[2]/h1''')
+                header_text = header.accessible_name
 
+        
+            selector = '''#certificates > div.pdp-certificates-search > 
+                    div.pdp-certificates-search__inputs > div > core-search'''
             try:
-                selector = '''#certificates > div.pdp-certificates-search > 
-                        div.pdp-certificates-search__inputs > div > core-search'''
+                element = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
                 iframe = driver.find_element(By.CSS_SELECTOR,selector)
                 ActionChains(driver).scroll_to_element(iframe).perform()
+            except TimeoutException:
+                try:
+                    iframe = driver.find_element(By.CSS_SELECTOR,selector)
+                    ActionChains(driver).scroll_to_element(iframe).perform()
 
-            except NoSuchElementException:
-                selector = '''#root > div > div > div.p-tabs > div.p-tabs
-                __content > div:nth-child(7) > div > div > div:nth-child(1)
-                  > div:nth-child(2) > div.pdp-documents__document-section 
-                  > div > div.pdp-documents__search > div.pdp-documents__search
-                  -inputs > div > div.c-search-bar.pdp-documents__search-bar.pdp
-                  -documents__search-bar--desktop > input'''
-            
-                iframe = driver.find_element(By.CSS_SELECTOR, selector)
-                ActionChains(driver).scroll_to_element(iframe).perform()
+                except NoSuchElementException:
+                    try:
+                        selector = '''#root > div > div > div.p-tabs > div.p-tabs__content > div:nth-child(7) > div > div
+                        > div:nth-child(1) > div:nth-child(2) > div.pdp-documents__document-section > div > div.pdp-documents__search
+                        > div.pdp-documents__search-inputs > div > div.c-search-bar.pdp-documents__search-bar.pdp-documents__search-bar--desktop > input'''
+                
+                        element = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                        iframe = driver.find_element(By.CSS_SELECTOR, selector)
+                        ActionChains(driver).scroll_to_element(iframe).perform()
+
+                    except TimeoutException:
+                        try:
+                            iframe = driver.find_element(By.CSS_SELECTOR, selector)
+                            ActionChains(driver).scroll_to_element(iframe).perform()
+                        except NoSuchElementException:
+                            print('znowu chuje zmienili html')
                              
             #wyszukanie search bar'u i wprowadzenie nr lot
             
@@ -125,27 +138,31 @@ def parser():
                                         )
             except AttributeError:
                 element = driver.find_element(
-                    By.XPATH, '''//*[@id="root"]/div/div/div[5]/div[2]
-                    /div[7]/div/div/div[1]/div[1]/div[2]/div/div[1]/div[2]
-                    /div/div[2]/input''')
+                    By.XPATH, '''//*[@id="root"]/div/div/div[5]/div[2]/div[7]/div/div/div[1]/div[1]/div[2]/div/div[1]/div[2]/div/div[2]/input''')
             element.click()
             element.send_keys(i[2])
             element.send_keys(Keys.RETURN)
-            time.sleep(2)
+            
         
             #pobranie linka pliku CoA
             try:
+                element = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.XPATH, '''//*[@id="certificates"]
+                    /div[2]/div[1]/div[2]/span[1]''')))
                 link = driver.find_element(
                     By.XPATH, '''//*[@id="certificates"]
                     /div[2]/div[1]/div[2]/span[1]''')
-                
-            except NoSuchElementException:
-                link = driver.find_element(By.XPATH, 
-                        '''//*[@id="root"]/div/div/div[5]
-                        /div[2]/div[7]/div/div/div[1]/div[1]
-                        /div[2]/div/div[2]/div[2]/div/span[1]
-                        /a/span[2]''')
-            
+            except TimeoutException:
+                try:
+                    link = driver.find_element(
+                        By.XPATH, '''//*[@id="certificates"]
+                        /div[2]/div[1]/div[2]/span[1]''')
+                except NoSuchElementException:
+                    link = driver.find_element(By.XPATH, 
+                            '''//*[@id="root"]/div/div/div[5]
+                            /div[2]/div[7]/div/div/div[1]/div[1]
+                            /div[2]/div/div[2]/div[2]/div/span[1]
+                            /a/span[2]''')
+         
             window_before = driver.window_handles[0]
             link.click()
             window_after = driver.window_handles[1]
@@ -165,4 +182,4 @@ def parser():
             url_path = new_dir + 'CoA_nr_lot_' + i[2]
             urllib.request.urlretrieve(String_url, url_path)
 
-parser()           
+parser()
