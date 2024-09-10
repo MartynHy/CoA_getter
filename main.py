@@ -10,7 +10,6 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import *
 import time
 import urllib
-#dupadupa
 
 df = pd.read_excel('odczynniki.xls', engine='xlrd')
 
