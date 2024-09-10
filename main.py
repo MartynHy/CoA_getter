@@ -99,7 +99,6 @@ def parser():
                     By.XPATH, '''//*[@id="root"]/div/div/div[4]/div/
                     div/div/div[3]/div[1]/div/div[2]/h1''')
                 header_text = header.accessible_name  
-            time.sleep(3)
 
             try:
                 selector = '''#certificates > div.pdp-certificates-search > 
