@@ -12,26 +12,27 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import *
-import time
 import urllib
 
 
 df = pd.read_excel('odczynniki.xls', engine='xlrd')
 
-dostawcy = {'thermo':'https://www.thermofisher.com/order/catalog/product/',
+manu = {'thermo':'https://www.thermofisher.com/order/catalog/product/',
             'sigma':'https://www.sigmaaldrich.com/PL/pl',
             'vwr':'https://pl.vwr.com/store/'}
 
 driver = webdriver.Chrome()
 
-#wyłączenie okna z wyborem wyszukiwarki
+#disables search engine selection pop-up
 
 chrome_options = Options()
 chrome_options.add_argument("--disable-search-engine-choice-screen")
 driver = webdriver.Chrome(options=chrome_options)
 
-#funkcja 'table_search' wyszukuje klucze 'keys' ze słownika 'dostawcy' iterując po data frame, zwraca listy do funkcji data_pass
-#funkcja data_pass zwraca listę list -> [link (słownik "dostawcy"), cat nr, lot nr (z data frame)]
+#'table_search' function iterates the df over keys ('manu' dict.),
+#returns lists to 'data_pass' function 'data_pass' returns
+# a list of lists -> [link ("manu" dict.), cat nr, lot nr (from df)]
+
 def data_pass():
 
     web_cat_lot=[]
@@ -41,18 +42,29 @@ def data_pass():
                 try:
                     if len(re.findall(key,row['web']))==1:
                         web_cat_lot.append([link, str(row['cat nr']), str(row['lot nr'])])
-                except:
-                    print('pusty wiersz kolumny "web"')
-            
-                
-    for item in dostawcy.items():
+                except TypeError:
+                    print('row of "web" column is empty')
+
+    for item in manu.items():
         table_search(item[0], item[1])
 
     return web_cat_lot
 
-#funkcja 'shadow_element' wyciąga element html z shadow-root
-def shadow_element(entry_selector: str, element_selector: str):
+def wait_until(time:int, sele, CSS=True):
+
+    if CSS==True:
+        element = WebDriverWait(driver, time).\
+            until(EC.visibility_of_element_located((By.CSS_SELECTOR, sele)))
+    else:
+        element = WebDriverWait(driver, time).\
+            until(EC.visibility_of_element_located((By.XPATH, sele)))
     
+    return element
+
+#'shadow_element' function gets an element from shadow-root
+
+def shadow_element(entry_selector: str, element_selector: str):
+
     shadow_entry = driver.find_element(By.CSS_SELECTOR, entry_selector)
     shadow_root = driver.execute_script("return arguments[0].shadowRoot", shadow_entry)
     element = shadow_root.find_element(By.CSS_SELECTOR, element_selector)
@@ -68,7 +80,9 @@ def shadow_elements(entry_selector: str, elements_selector: str):
 
     return elements
 
-#funkcja parser nawiguje po stronie internetowej w zależności od producenta (zrobiono wersję dla thermoscientific)
+#'parser' navigates a website depending of manufacturer 
+# (code prepared for Thermofisher so far)
+
 def parser():
 
     web_cat_lot = data_pass()
@@ -81,15 +95,15 @@ def parser():
             driver.get(adress)
             driver.maximize_window()
             
-            #zatwierdzenie "cookie"
+            #acceptation of 'cookies'
             try:
                 cookie = driver.find_element(
                     By.ID,'''truste-consent-button''').click()
 
             except NoSuchElementException:
-                pass           
+                pass          
             
-            #zapisanie do zmiennej "header_text" nazwy odczynnika
+        #assigning product name to "header_text" variable
             try:
                 header = driver.find_element(
                     By.XPATH, '''//*[@id="root"]/div/div[1]/div[2]/div[2]/div[1]/span''')
@@ -97,14 +111,16 @@ def parser():
                       
             except NoSuchElementException:
                 header = driver.find_element(
-                    By.XPATH, '''//*[@id="root"]/div/div/div[4]/div/div/div/div[3]/div[1]/div/div[2]/h1''')
+                    By.XPATH, '''//*[@id="root"]/div/div/div[4]\
+                        /div/div/div/div[3]/div[1]/div/div[2]/h1''')
                 header_text = header.accessible_name
 
         
-            selector = '''#certificates > div.pdp-certificates-search > 
-                    div.pdp-certificates-search__inputs > div > core-search'''
+            selector = '''#certificates > div.pdp-certificates-search > \
+                        div.pdp-certificates-search__inputs > div > core-search'''
             try:
-                element = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                wait_until(10, selector)
+
                 iframe = driver.find_element(By.CSS_SELECTOR,selector)
                 ActionChains(driver).scroll_to_element(iframe).perform()
             except TimeoutException:
@@ -113,12 +129,10 @@ def parser():
                     ActionChains(driver).scroll_to_element(iframe).perform()
 
                 except NoSuchElementException:
+                    selector = '''#root > div > div > div.p-tabs > div.p-tabs__content > div:nth-child(7) > div > div > div:nth-child(1) > div:nth-child(2) > div.pdp-documents__document-section > div > div.pdp-documents__search > div.pdp-documents__search-inputs > div > div.c-search-bar.pdp-documents__search-bar.pdp-documents__search-bar--desktop > input'''
                     try:
-                        selector = '''#root > div > div > div.p-tabs > div.p-tabs__content > div:nth-child(7) > div > div
-                        > div:nth-child(1) > div:nth-child(2) > div.pdp-documents__document-section > div > div.pdp-documents__search
-                        > div.pdp-documents__search-inputs > div > div.c-search-bar.pdp-documents__search-bar.pdp-documents__search-bar--desktop > input'''
-                
-                        element = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                        wait_until(10, selector)
+                        
                         iframe = driver.find_element(By.CSS_SELECTOR, selector)
                         ActionChains(driver).scroll_to_element(iframe).perform()
 
@@ -127,47 +141,70 @@ def parser():
                             iframe = driver.find_element(By.CSS_SELECTOR, selector)
                             ActionChains(driver).scroll_to_element(iframe).perform()
                         except NoSuchElementException:
-                            print('znowu chuje zmienili html')
+                            print('html structure has changed or website crashed A')
                              
-            #wyszukanie search bar'u i wprowadzenie nr lot
+            #finds search bar and enters lot nr
             
             try:
+                wait_until(10, selector)
                 element = shadow_element(
                             entry_selector = selector,
                             element_selector = 'div > div > input'
                                         )
-            except AttributeError:
-                element = driver.find_element(
-                    By.XPATH, '''//*[@id="root"]/div/div/div[5]/div[2]/div[7]/div/div/div[1]/div[1]/div[2]/div/div[1]/div[2]/div/div[2]/input''')
-            element.click()
+            except (NoSuchElementException, AttributeError):
+                try:
+                    element = shadow_element(
+                            entry_selector = selector,
+                            element_selector = 'div > div > input'
+                                        )
+                except (NoSuchElementException, AttributeError):
+                    selector = '''//*[@id="root"]/div/div/div[5]/div[2]/div[7]/div/div/div[1]/div[1]/div[2]/div/div[1]/div[2]/div/div[2]/input'''
+                    try:
+                        wait_until(10, selector, CSS=False)
+                        element = driver.find_element(By.XPATH, selector)
+                    except TimeoutException:
+                        try:
+                            element = driver.find_element(By.XPATH, selector)
+                        except NoSuchElementException:
+                            print('html structure has changed or website crashed B')
+           
+            driver.execute_script("arguments[0].click();", element)
             element.send_keys(i[2])
             element.send_keys(Keys.RETURN)
             
         
-            #pobranie linka pliku CoA
+            #getting link to CoA
             try:
-                element = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.XPATH, '''//*[@id="certificates"]
-                    /div[2]/div[1]/div[2]/span[1]''')))
-                link = driver.find_element(
-                    By.XPATH, '''//*[@id="certificates"]
-                    /div[2]/div[1]/div[2]/span[1]''')
+                selector = '''//*[@id="certificates"]
+                    /div[2]/div[1]/div[2]/span[1]'''
+                
+                element = wait_until(10, selector, CSS=False)
+
+                link = driver.find_element(By.XPATH, selector)
+                
             except TimeoutException:
                 try:
-                    link = driver.find_element(
-                        By.XPATH, '''//*[@id="certificates"]
-                        /div[2]/div[1]/div[2]/span[1]''')
+                    link = driver.find_element(By.XPATH, selector)
+
                 except NoSuchElementException:
-                    link = driver.find_element(By.XPATH, 
-                            '''//*[@id="root"]/div/div/div[5]
-                            /div[2]/div[7]/div/div/div[1]/div[1]
-                            /div[2]/div/div[2]/div[2]/div/span[1]
-                            /a/span[2]''')
+                    selector = '''//*[@id="root"]/div/div/div[5]
+                                /div[2]/div[7]/div/div/div[1]/div[1]
+                                /div[2]/div/div[2]/div[2]/div/span[1]
+                                /a/span[2]'''
+                    try:
+                        element = wait_until(10, selector, CSS=False)
+                        link = driver.find_element(By.XPATH, selector)
+                    except TimeoutException:
+                        try:
+                            link = driver.find_element(By.XPATH, selector)
+                        except NoSuchElementException:
+                            print('html structure has changed or website crashed C')
          
             window_before = driver.window_handles[0]
-            link.click()
+            driver.execute_script("arguments[0].click();", link)
             window_after = driver.window_handles[1]
             driver.switch_to.window(window_after)
-            String_url = driver.current_url
+            string_url = driver.current_url
             driver.close()
             driver.switch_to.window(window_before)
 
@@ -180,6 +217,6 @@ def parser():
                 pass
            
             url_path = new_dir + 'CoA_nr_lot_' + i[2]
-            urllib.request.urlretrieve(String_url, url_path)
+            urllib.request.urlretrieve(string_url, url_path)
 
 parser()
